@@ -41,4 +41,3 @@ schema:
         device_id: int(1,255)?
   temperature_unit: list(C|F)
   debug: bool
-image: "ghcr.io/jtoniolo/{arch}-addon-renogy-bt"
