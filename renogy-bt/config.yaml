@@ -1,7 +1,7 @@
 name: "Renogy BT"
 description: "Monitor Renogy solar devices via Bluetooth"
 version: "0.1.0"
-slug: "renogy_bt"
+slug: "renogy-bt"
 init: false
 arch:
   - aarch64
