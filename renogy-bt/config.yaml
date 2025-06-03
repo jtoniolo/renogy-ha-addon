@@ -1,7 +1,9 @@
-name: "Renogy BT"
-description: "Monitor Renogy solar devices via Bluetooth"
+# https://developers.home-assistant.io/docs/add-ons/configuration#add-on-config
+name: Renogy BT
+description: Monitor Renogy solar devices via Bluetooth
 version: "0.1.0"
-slug: "renogy-bt"
+slug: renogy-bt
+url: "https://github.com/jtoniolo/renogy-ha-addon/tree/main/renogy-bt"
 init: false
 arch:
   - aarch64
@@ -39,3 +41,4 @@ schema:
         device_id: int(1,255)?
   temperature_unit: list(C|F)
   debug: bool
+image: "ghcr.io/jtoniolo/{arch}-addon-renogy-bt"
