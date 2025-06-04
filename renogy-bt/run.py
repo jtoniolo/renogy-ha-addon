@@ -6,6 +6,7 @@ import os
 import sys
 import time
 import configparser
+import requests
 from bleak import BleakScanner
 import paho.mqtt.client as mqtt
 
@@ -32,6 +33,7 @@ class HomeAssistantIntegration:
         self.mqtt_client = None
         self.mqtt_connected = False
         self.mqtt_discovery_sent = {}  # Keep track of discovery messages already sent
+        self.mqtt_config = self._get_mqtt_config_from_supervisor()
         
         if os.path.exists(DEVICE_CONFIG_PATH):
             self._load_device_configs()
@@ -125,19 +127,26 @@ class HomeAssistantIntegration:
     
     def _setup_mqtt(self):
         """Set up the MQTT client"""
-        # Use legacy callback style since the server might not support the newer protocol
+        # Use legacy callback style for maximum compatibility
         self.mqtt_client = mqtt.Client(client_id="renogy-ha-addon", callback_api_version=mqtt.CallbackAPIVersion.VERSION1)
         self.mqtt_client.on_connect = self._on_mqtt_connect
         self.mqtt_client.on_disconnect = self._on_mqtt_disconnect
         
-        # Add username and password for MQTT connection
-        if 'mqtt' in self.config and 'username' in self.config['mqtt'] and 'password' in self.config['mqtt']:
-            if self.config['mqtt']['username']:
-                self.mqtt_client.username_pw_set(self.config['mqtt']['username'], self.config['mqtt']['password'])
-        
         try:
-            self.mqtt_client.connect("core-mosquitto", 1883, 60)
+            # Use the MQTT config obtained from Supervisor API
+            if self.mqtt_config['username'] and self.mqtt_config['password']:
+                logging.info(f"Setting up MQTT with authentication for user {self.mqtt_config['username']}")
+                self.mqtt_client.username_pw_set(self.mqtt_config['username'], self.mqtt_config['password'])
+            else:
+                logging.info("Setting up MQTT without authentication")
+                
+            # Connect to the MQTT broker
+            host = self.mqtt_config['host']
+            port = self.mqtt_config['port']
+            logging.info(f"Connecting to MQTT broker at {host}:{port}")
+            self.mqtt_client.connect(host, port, 60)
             self.mqtt_client.loop_start()
+            logging.info("MQTT client started")
         except Exception as e:
             logging.error(f"Failed to connect to MQTT broker: {e}")
     
@@ -311,13 +320,17 @@ class HomeAssistantIntegration:
                     # Use consistent callback API version
                     publisher = mqtt.Client(client_id="renogy-ha-addon-discovery", callback_api_version=mqtt.CallbackAPIVersion.VERSION1)
                     
-                    # Add username/password if available
-                    if 'mqtt' in self.config and 'username' in self.config['mqtt'] and self.config['mqtt']['username']:
-                        publisher.username_pw_set(self.config['mqtt']['username'], self.config['mqtt']['password'])
-                        
-                    publisher.connect("core-mosquitto", 1883)
-                    publisher.publish(config_topic, json.dumps(config_payload))
-                    publisher.disconnect()
+                    # Use the MQTT config from Supervisor API
+                    if self.mqtt_config['username'] and self.mqtt_config['password']:
+                        publisher.username_pw_set(self.mqtt_config['username'], self.mqtt_config['password'])
+                    
+                    try:
+                        publisher.connect(self.mqtt_config['host'], self.mqtt_config['port'])
+                        publisher.publish(config_topic, json.dumps(config_payload))
+                        publisher.disconnect()
+                        logging.debug(f"Published discovery for {object_id}")
+                    except Exception as e:
+                        logging.error(f"Failed to publish discovery message: {e}")
                     
                     # Track that we've sent this discovery message
                     if device_unique_id not in self.mqtt_discovery_sent:
@@ -448,13 +461,21 @@ class HomeAssistantIntegration:
                 # Use consistent callback API version
                 publisher = mqtt.Client(client_id=f"renogy-bt-{device_id}", callback_api_version=mqtt.CallbackAPIVersion.VERSION1)
                 
-                # Add username/password from client config if available
-                if 'user' in client.config['mqtt'] and client.config['mqtt']['user']:
-                    publisher.username_pw_set(client.config['mqtt']['user'], client.config['mqtt']['password'])
+                # Use the MQTT config from Supervisor API
+                if self.mqtt_config['username'] and self.mqtt_config['password']:
+                    publisher.username_pw_set(self.mqtt_config['username'], self.mqtt_config['password'])
+                
+                try:
+                    # Use the host and port from the Supervisor-provided config
+                    host = self.mqtt_config['host']
+                    port = self.mqtt_config['port']
                     
-                publisher.connect(client.config['mqtt']['server'], client.config['mqtt'].getint('port'))
-                publisher.publish(topic, json.dumps(filtered_data))
-                publisher.disconnect()
+                    publisher.connect(host, port)
+                    publisher.publish(topic, json.dumps(filtered_data))
+                    publisher.disconnect()
+                    logging.info(f"Published data to {topic}")
+                except Exception as e:
+                    logging.error(f"Error publishing to MQTT: {e}")
             except Exception as e:
                 logging.error(f"Error publishing to MQTT: {e}")
     
@@ -560,6 +581,55 @@ class HomeAssistantIntegration:
                     logging.error(f"Unknown device type: {device_type}")
             except Exception as e:
                 logging.error(f"Error starting device: {e}")
+
+    def _get_mqtt_config_from_supervisor(self):
+        """Get MQTT connection details from Home Assistant Supervisor API"""
+        mqtt_config = {
+            'host': 'core-mosquitto',
+            'port': 1883,
+            'username': '',
+            'password': ''
+        }
+        
+        try:
+            # The Supervisor API is available at http://supervisor/core
+            # We need the authentication token from the SUPERVISOR_TOKEN env var
+            supervisor_token = os.environ.get('SUPERVISOR_TOKEN')
+            if supervisor_token:
+                headers = {
+                    'Authorization': f'Bearer {supervisor_token}',
+                    'Content-Type': 'application/json'
+                }
+                
+                # Get services info from Supervisor
+                response = requests.get('http://supervisor/services', headers=headers)
+                if response.status_code == 200:
+                    services = response.json()['data']
+                    if 'mqtt' in services:
+                        logging.info("Found MQTT service configuration from Supervisor API")
+                        mqtt_service = services['mqtt']
+                        mqtt_config = {
+                            'host': mqtt_service.get('host', 'core-mosquitto'),
+                            'port': mqtt_service.get('port', 1883),
+                            'username': mqtt_service.get('username', ''),
+                            'password': mqtt_service.get('password', '')
+                        }
+                        
+                        if mqtt_config['username'] and mqtt_config['password']:
+                            logging.info(f"Got MQTT credentials for {mqtt_config['username']} from Supervisor API")
+                        else:
+                            logging.info("No MQTT authentication required based on Supervisor API")
+                            
+                        return mqtt_config
+                    else:
+                        logging.warning("MQTT service not found in Supervisor API response")
+                else:
+                    logging.warning(f"Failed to get services from Supervisor API: {response.status_code}")
+        except Exception as e:
+            logging.warning(f"Could not get MQTT config from Supervisor: {e}")
+            
+        logging.info("Using default MQTT configuration")
+        return mqtt_config
 
 if __name__ == "__main__":
     integration = HomeAssistantIntegration()
