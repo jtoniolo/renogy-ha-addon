@@ -1,7 +1,7 @@
 # https://developers.home-assistant.io/docs/add-ons/configuration#add-on-config
 name: Renogy BT
 description: Monitor Renogy solar devices via Bluetooth
-version: "0.1.5"
+version: "0.1.6"
 slug: renogy-bt
 url: "https://github.com/jtoniolo/renogy-ha-addon/tree/main/renogy-bt"
 init: false
@@ -27,6 +27,10 @@ options:
   mqtt:
     topic_prefix: "renogy"
     discovery: true
+    host: "core-mosquitto"
+    port: 1883
+    username: ""
+    password: ""
   bluetooth:
     auto_discover: true
   known_devices: []
@@ -37,6 +41,10 @@ schema:
   mqtt:
     topic_prefix: "str"
     discovery: "bool"
+    host: "str"
+    port: "int(1,65535)"
+    username: "str?"
+    password: "str?"
   bluetooth:
     auto_discover: "bool"
   known_devices:

@@ -33,7 +33,7 @@ class HomeAssistantIntegration:
         self.mqtt_client = None
         self.mqtt_connected = False
         self.mqtt_discovery_sent = {}  # Keep track of discovery messages already sent
-        self.mqtt_config = self._get_mqtt_config_from_supervisor()
+        self.mqtt_config = self._get_mqtt_config_from_config()
         
         if os.path.exists(DEVICE_CONFIG_PATH):
             self._load_device_configs()
@@ -156,11 +156,25 @@ class HomeAssistantIntegration:
             logging.info("Connected to MQTT broker")
             self.mqtt_connected = True
         else:
-            logging.error(f"Failed to connect to MQTT broker with code {rc}")
+            error_messages = {
+                1: "Connection refused - incorrect protocol version",
+                2: "Connection refused - invalid client identifier",
+                3: "Connection refused - server unavailable",
+                4: "Connection refused - bad username or password",
+                5: "Connection refused - not authorised"
+            }
+            error_msg = error_messages.get(rc, f"Unknown error code: {rc}")
+            logging.error(f"Failed to connect to MQTT broker: {error_msg}")
+            
+            if rc in [4, 5]:
+                logging.error("Please check your MQTT username and password in the add-on configuration")
     
     def _on_mqtt_disconnect(self, client, userdata, rc):
         """Legacy V1 callback for when the MQTT client disconnects"""
-        logging.warning(f"Disconnected from MQTT broker with code {rc}")
+        if rc == 0:
+            logging.info("Disconnected from MQTT broker (clean disconnect)")
+        else:
+            logging.warning(f"Disconnected from MQTT broker with code {rc}")
         self.mqtt_connected = False
         
     def _on_mqtt_connect_v2(self, client, userdata, flags, reason_code, properties):
@@ -582,53 +596,20 @@ class HomeAssistantIntegration:
             except Exception as e:
                 logging.error(f"Error starting device: {e}")
 
-    def _get_mqtt_config_from_supervisor(self):
-        """Get MQTT connection details from Home Assistant Supervisor API"""
+    def _get_mqtt_config_from_config(self):
+        """Get MQTT connection details from config file"""
+        # Get MQTT settings from the config
         mqtt_config = {
-            'host': 'core-mosquitto',
-            'port': 1883,
-            'username': '',
-            'password': ''
+            'host': self.config['mqtt'].get('host', 'core-mosquitto'),
+            'port': self.config['mqtt'].get('port', 1883),
+            'username': self.config['mqtt'].get('username', ''),
+            'password': self.config['mqtt'].get('password', '')
         }
         
-        try:
-            # The Supervisor API is available at http://supervisor/core
-            # We need the authentication token from the SUPERVISOR_TOKEN env var
-            supervisor_token = os.environ.get('SUPERVISOR_TOKEN')
-            if supervisor_token:
-                headers = {
-                    'Authorization': f'Bearer {supervisor_token}',
-                    'Content-Type': 'application/json'
-                }
-                
-                # Get services info from Supervisor
-                response = requests.get('http://supervisor/services', headers=headers)
-                if response.status_code == 200:
-                    services = response.json()['data']
-                    if 'mqtt' in services:
-                        logging.info("Found MQTT service configuration from Supervisor API")
-                        mqtt_service = services['mqtt']
-                        mqtt_config = {
-                            'host': mqtt_service.get('host', 'core-mosquitto'),
-                            'port': mqtt_service.get('port', 1883),
-                            'username': mqtt_service.get('username', ''),
-                            'password': mqtt_service.get('password', '')
-                        }
-                        
-                        if mqtt_config['username'] and mqtt_config['password']:
-                            logging.info(f"Got MQTT credentials for {mqtt_config['username']} from Supervisor API")
-                        else:
-                            logging.info("No MQTT authentication required based on Supervisor API")
-                            
-                        return mqtt_config
-                    else:
-                        logging.warning("MQTT service not found in Supervisor API response")
-                else:
-                    logging.warning(f"Failed to get services from Supervisor API: {response.status_code}")
-        except Exception as e:
-            logging.warning(f"Could not get MQTT config from Supervisor: {e}")
-            
-        logging.info("Using default MQTT configuration")
+        # Log MQTT connection details (without password)
+        logging.info(f"MQTT Configuration: Host={mqtt_config['host']}, Port={mqtt_config['port']}, " +
+                    f"Username={'<set>' if mqtt_config['username'] else '<not set>'}")
+        
         return mqtt_config
 
 if __name__ == "__main__":
