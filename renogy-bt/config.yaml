@@ -14,7 +14,12 @@ arch:
 startup: services
 boot: auto
 map:
-  - bluetooth:ro
+  - share:ro
+host_dbus: true
+privileged:
+  - NET_ADMIN
+  - SYS_ADMIN
+apparmor: false  # Disable AppArmor for Bluetooth access
 services:
   - mqtt:need
 options:
@@ -28,16 +33,16 @@ options:
   temperature_unit: "C"
   debug: false
 schema:
-  scan_interval: int(10,600)
+  scan_interval: "int(10,600)"
   mqtt:
-    topic_prefix: str
-    discovery: bool
+    topic_prefix: "str"
+    discovery: "bool"
   bluetooth:
-    auto_discover: bool
+    auto_discover: "bool"
     known_devices:
-      - name: str?
-        mac_address: str
-        device_type: list(rover|rover_history|battery|inverter|dc_charger)
-        device_id: int(1,255)?
-  temperature_unit: list(C|F)
-  debug: bool
+      - name: "str?"
+        mac_address: "str"
+        device_type: "list(rover|rover_history|battery|inverter|dc_charger)"
+        device_id: "int(1,255)?"
+  temperature_unit: "list(C|F)"
+  debug: "bool"

@@ -1,4 +1,43 @@
 configuration:
-  message:
-    name: Message
-    description: The message that will be printed to the log when starting this example add-on.
+  scan_interval:
+    name: Scan Interval
+    description: Time in seconds between device polling (min 10, max 600).
+  mqtt:
+    name: MQTT Settings
+    description: MQTT integration configuration.
+  mqtt.topic_prefix:
+    name: Topic Prefix
+    description: Prefix used for all MQTT topics.
+  mqtt.discovery:
+    name: Home Assistant Discovery
+    description: Enable automatic device discovery in Home Assistant.
+  bluetooth:
+    name: Bluetooth Settings
+    description: Bluetooth device configuration.
+  bluetooth.auto_discover:
+    name: Auto-discover Devices
+    description: Automatically discover Renogy devices via Bluetooth.
+  bluetooth.known_devices:
+    name: Known Devices
+    description: List of manually configured Renogy devices.
+  bluetooth.known_devices.name:
+    name: Device Name
+    description: Optional friendly name for the device.
+  bluetooth.known_devices.mac_address:
+    name: MAC Address
+    description: Bluetooth MAC address of the Renogy device.
+  bluetooth.known_devices.device_type:
+    name: Device Type
+    description: Type of Renogy device (rover, rover_history, battery, inverter, dc_charger).
+  bluetooth.known_devices.device_id:
+    name: Device ID
+    description: Optional device ID (1-255) for addressing specific devices.
+  temperature_unit:
+    name: Temperature Unit
+    description: Unit to use for temperature readings (Celsius or Fahrenheit).
+  debug:
+    name: Debug Mode
+    description: Enable debug logging for troubleshooting.
+
+network:
+  1883/tcp: MQTT broker port (used for communication with Home Assistant)
