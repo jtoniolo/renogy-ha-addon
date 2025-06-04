@@ -20,6 +20,18 @@ configuration:
   bluetooth.known_devices:
     name: Known Devices
     description: List of manually configured Renogy devices.
+  bluetooth.known_devices.name:
+    name: Device Name
+    description: Optional friendly name for the device.
+  bluetooth.known_devices.mac_address:
+    name: MAC Address
+    description: Bluetooth MAC address of the Renogy device.
+  bluetooth.known_devices.device_type:
+    name: Device Type
+    description: Type of Renogy device (rover, rover_history, battery, inverter, dc_charger).
+  bluetooth.known_devices.device_id:
+    name: Device ID
+    description: Optional device ID (1-255) for addressing specific devices.
   temperature_unit:
     name: Temperature Unit
     description: Unit to use for temperature readings (Celsius or Fahrenheit).
