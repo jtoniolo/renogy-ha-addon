@@ -125,10 +125,10 @@ class HomeAssistantIntegration:
     
     def _setup_mqtt(self):
         """Set up the MQTT client"""
-        # Use VERSION2 to avoid deprecation warning
-        self.mqtt_client = mqtt.Client(client_id="renogy-ha-addon")
-        self.mqtt_client.on_connect = self._on_mqtt_connect_v2
-        self.mqtt_client.on_disconnect = self._on_disconnect_v2
+        # Use legacy callback style since the server might not support the newer protocol
+        self.mqtt_client = mqtt.Client(client_id="renogy-ha-addon", callback_api_version=mqtt.CallbackAPIVersion.VERSION1)
+        self.mqtt_client.on_connect = self._on_mqtt_connect
+        self.mqtt_client.on_disconnect = self._on_mqtt_disconnect
         
         # Add username and password for MQTT connection
         if 'mqtt' in self.config and 'username' in self.config['mqtt'] and 'password' in self.config['mqtt']:
@@ -308,8 +308,8 @@ class HomeAssistantIntegration:
                 
                 # Publish discovery message
                 try:
-                    # Use modern MQTT publish without callback_api_version parameter
-                    publisher = mqtt.Client(client_id="renogy-ha-addon-discovery")
+                    # Use consistent callback API version
+                    publisher = mqtt.Client(client_id="renogy-ha-addon-discovery", callback_api_version=mqtt.CallbackAPIVersion.VERSION1)
                     
                     # Add username/password if available
                     if 'mqtt' in self.config and 'username' in self.config['mqtt'] and self.config['mqtt']['username']:
@@ -331,20 +331,25 @@ class HomeAssistantIntegration:
         """Discover Renogy devices via Bluetooth"""
         logging.info("Starting Bluetooth device discovery...")
         
-        devices = await BleakScanner.discover(timeout=10.0)
-        found_devices = []
-        
-        for device in devices:
-            if device.name and (device.name.startswith("BT-TH") or 
-                                device.name.startswith("RNGRBP") or 
-                                device.name.startswith("BTRIC")):
-                logging.info(f"Found potential Renogy device: {device.name} ({device.address})")
-                found_devices.append({
-                    "name": device.name,
-                    "mac_address": device.address
-                })
-        
-        return found_devices
+        # Create a new scanner with the event loop
+        try:
+            devices = await BleakScanner.discover(timeout=10.0)
+            found_devices = []
+            
+            for device in devices:
+                if device.name and (device.name.startswith("BT-TH") or 
+                                    device.name.startswith("RNGRBP") or 
+                                    device.name.startswith("BTRIC")):
+                    logging.info(f"Found potential Renogy device: {device.name} ({device.address})")
+                    found_devices.append({
+                        "name": device.name,
+                        "mac_address": device.address
+                    })
+            
+            return found_devices
+        except Exception as e:
+            logging.error(f"Error during device discovery: {e}")
+            return []
     
     def update_device_config(self, found_devices):
         """Update the device configuration based on discovered devices"""
@@ -440,8 +445,8 @@ class HomeAssistantIntegration:
                 # Publish state data
                 topic = client.config['mqtt']['topic']
                 
-                # Use modern MQTT publish without callback_api_version parameter
-                publisher = mqtt.Client(client_id=f"renogy-bt-{device_id}")
+                # Use consistent callback API version
+                publisher = mqtt.Client(client_id=f"renogy-bt-{device_id}", callback_api_version=mqtt.CallbackAPIVersion.VERSION1)
                 
                 # Add username/password from client config if available
                 if 'user' in client.config['mqtt'] and client.config['mqtt']['user']:
@@ -463,9 +468,16 @@ class HomeAssistantIntegration:
         
         if 'bluetooth' in self.config and self.config['bluetooth'].get('auto_discover', False):
             logging.info("Auto-discovery mode enabled. Searching for devices...")
-            # Use new asyncio pattern
-            devices = asyncio.run(self.discover_devices())
-            self.update_device_config(devices)
+            
+            try:
+                # Create and set event loop for discovery
+                discovery_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(discovery_loop)
+                devices = discovery_loop.run_until_complete(self.discover_devices())
+                discovery_loop.close()
+                self.update_device_config(devices)
+            except Exception as e:
+                logging.error(f"Error during auto-discovery: {e}")
         
         # Add known devices from config if they exist
         known_devices = []
@@ -528,6 +540,11 @@ class HomeAssistantIntegration:
         for config in self.device_configs:
             try:
                 device_type = config['device']['type']
+                logging.info(f"Init {device_type}: {config['device']['alias']} => {config['device']['mac_addr']}")
+                
+                # Create a new event loop for each device client to avoid the "no current event loop" error
+                device_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(device_loop)
                 
                 if device_type == 'RNG_CTRL':
                     RoverClient(config, on_data_callback=self.on_data_received, on_error_callback=self.on_error).start()
