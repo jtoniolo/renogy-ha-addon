@@ -306,8 +306,13 @@ class DeviceManager:
         entity_mapping = self.get_entity_mapping_by_device_type(device_type)
         
         # Create discovery messages for each available data point
-        discovery_prefix = self.config['mqtt']['topic_prefix']
-        base_topic = f"{discovery_prefix}/{device_unique_id}"
+        # Use the topic prefix for discovery if the user has set a custom one,
+        # otherwise fall back to the standard "homeassistant" prefix
+        if 'mqtt' in self.config and 'topic_prefix' in self.config['mqtt']:
+            discovery_prefix = self.config['mqtt']['topic_prefix']
+        else:
+            discovery_prefix = "homeassistant"
+        base_topic = f"{self.config['mqtt']['topic_prefix']}/{device_unique_id}"
         
         # Keep track of discovered entities by device
         if device_unique_id not in self.mqtt_discovery_sent:
