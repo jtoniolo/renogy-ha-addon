@@ -14,6 +14,27 @@ startup: services
 services:
   - mqtt:need
 options:
-  message: "Hello world..."
+  scan_interval: 60
+  mqtt:
+    topic_prefix: "renogy"
+    discovery: true
+  bluetooth:
+    auto_discover: true
+    known_devices: []
+  temperature_unit: "C"
+  debug: false
 schema:
-  message: "str?"
+  scan_interval: int(10,600)
+  mqtt:
+    topic_prefix: str
+    discovery: bool
+  bluetooth:
+    auto_discover: bool
+    known_devices:
+      - name: str?
+        mac_address: str
+        device_type: list(rover|rover_history|battery|inverter|dc_charger)
+        device_id: int(1,255)?
+  temperature_unit: list(C|F)
+  debug: bool
+
