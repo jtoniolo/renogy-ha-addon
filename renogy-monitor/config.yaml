@@ -23,26 +23,26 @@ services:
   - mqtt:need
 options:
   scan_interval: 60
-  mqtt:
-    topic_prefix: "renogy"
-    discovery: true
-  bluetooth:
-    auto_discover: true
-    known_devices: []
-  temperature_unit: "C"
-  debug: false
+  # mqtt:
+  #   topic_prefix: "renogy"
+  #   discovery: true
+  # bluetooth:
+  #   auto_discover: true
+  #   known_devices: []
+  # temperature_unit: "C"
+  # debug: false
 schema:
   scan_interval: "int(10,600)"
-  mqtt:
-    topic_prefix: "str"
-    discovery: "bool"
-  bluetooth:
-    auto_discover: "bool"
-    known_devices:
-      - name: "str?"
-        mac_address: "str"
-        device_type: "list(rover|rover_history|battery|inverter|dc_charger)"
-        device_id: "int(1,255)?"
-  temperature_unit: "list(C|F)"
-  debug: "bool"
+  # mqtt:
+  #   topic_prefix: "str"
+  #   discovery: "bool"
+  # bluetooth:
+  #   auto_discover: "bool"
+  #   known_devices:
+  #     - name: "str?"
+  #       mac_address: "str"
+  #       device_type: "list(rover|rover_history|battery|inverter|dc_charger)"
+  #       device_id: "int(1,255)?"
+  # temperature_unit: "list(C|F)"
+  # debug: "bool"
 
