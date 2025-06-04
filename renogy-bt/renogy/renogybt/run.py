@@ -265,8 +265,8 @@ class HomeAssistantIntegration:
         }
         
         # Create discovery messages for each available data point
-        discovery_prefix = "homeassistant"
-        base_topic = f"{self.config['mqtt']['topic_prefix']}/{device_unique_id}"
+        discovery_prefix = self.config['mqtt']['topic_prefix']
+        base_topic = f"{discovery_prefix}/{device_unique_id}"
         
         for field, value in device_data.items():
             if field in entity_mapping and field not in self.mqtt_discovery_sent.get(device_unique_id, []):

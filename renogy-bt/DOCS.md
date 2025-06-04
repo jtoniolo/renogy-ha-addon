@@ -78,9 +78,11 @@ This add-on fully integrates with Home Assistant via MQTT discovery. When enable
 ### Topic Structure
 
 The MQTT topics follow this structure:
-- Discovery topics: `homeassistant/sensor/{device_id}/{component_id}/config`
+- Discovery topics: `{topic_prefix}/sensor/{device_id}/{component_id}/config`
 - State topics: `{topic_prefix}/renogy_{device_id}/state`
 - Availability topics: `{topic_prefix}/renogy_{device_id}/availability`
+
+Where `{topic_prefix}` is the value from your `mqtt.topic_prefix` configuration (defaults to "homeassistant").
 
 ## Troubleshooting
 
