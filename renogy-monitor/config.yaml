@@ -11,9 +11,6 @@ arch:
   - amd64
   - i386
 startup: services
-boot: auto
-map:
-  - bluetooth:ro
 services:
   - mqtt:need
 options:
