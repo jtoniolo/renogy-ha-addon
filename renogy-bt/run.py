@@ -125,9 +125,15 @@ class HomeAssistantIntegration:
     
     def _setup_mqtt(self):
         """Set up the MQTT client"""
-        self.mqtt_client = mqtt.Client(client_id="renogy-ha-addon", callback_api_version=mqtt.CallbackAPIVersion.VERSION1)
-        self.mqtt_client.on_connect = self._on_mqtt_connect
-        self.mqtt_client.on_disconnect = self._on_mqtt_disconnect
+        # Use VERSION2 to avoid deprecation warning
+        self.mqtt_client = mqtt.Client(client_id="renogy-ha-addon")
+        self.mqtt_client.on_connect = self._on_mqtt_connect_v2
+        self.mqtt_client.on_disconnect = self._on_disconnect_v2
+        
+        # Add username and password for MQTT connection
+        if 'mqtt' in self.config and 'username' in self.config['mqtt'] and 'password' in self.config['mqtt']:
+            if self.config['mqtt']['username']:
+                self.mqtt_client.username_pw_set(self.config['mqtt']['username'], self.config['mqtt']['password'])
         
         try:
             self.mqtt_client.connect("core-mosquitto", 1883, 60)
@@ -136,7 +142,7 @@ class HomeAssistantIntegration:
             logging.error(f"Failed to connect to MQTT broker: {e}")
     
     def _on_mqtt_connect(self, client, userdata, flags, rc):
-        """Callback for when the MQTT client connects"""
+        """Legacy V1 callback for when the MQTT client connects"""
         if rc == 0:
             logging.info("Connected to MQTT broker")
             self.mqtt_connected = True
@@ -144,8 +150,21 @@ class HomeAssistantIntegration:
             logging.error(f"Failed to connect to MQTT broker with code {rc}")
     
     def _on_mqtt_disconnect(self, client, userdata, rc):
-        """Callback for when the MQTT client disconnects"""
+        """Legacy V1 callback for when the MQTT client disconnects"""
         logging.warning(f"Disconnected from MQTT broker with code {rc}")
+        self.mqtt_connected = False
+        
+    def _on_mqtt_connect_v2(self, client, userdata, flags, reason_code, properties):
+        """V2 callback for when the MQTT client connects"""
+        if reason_code.is_successful:
+            logging.info("Connected to MQTT broker")
+            self.mqtt_connected = True
+        else:
+            logging.error(f"Failed to connect to MQTT broker with code {reason_code}")
+    
+    def _on_disconnect_v2(self, client, userdata, disconnect_flags, reason_code, properties):
+        """V2 callback for when the MQTT client disconnects"""
+        logging.warning(f"Disconnected from MQTT broker with code {reason_code}")
         self.mqtt_connected = False
     
     def _send_mqtt_discovery(self, device_id, device_name, device_data):
@@ -289,8 +308,13 @@ class HomeAssistantIntegration:
                 
                 # Publish discovery message
                 try:
-                    # Use updated MQTT publish with callback_api_version
-                    publisher = mqtt.Client(client_id="renogy-ha-addon-discovery", callback_api_version=mqtt.CallbackAPIVersion.VERSION1)
+                    # Use modern MQTT publish without callback_api_version parameter
+                    publisher = mqtt.Client(client_id="renogy-ha-addon-discovery")
+                    
+                    # Add username/password if available
+                    if 'mqtt' in self.config and 'username' in self.config['mqtt'] and self.config['mqtt']['username']:
+                        publisher.username_pw_set(self.config['mqtt']['username'], self.config['mqtt']['password'])
+                        
                     publisher.connect("core-mosquitto", 1883)
                     publisher.publish(config_topic, json.dumps(config_payload))
                     publisher.disconnect()
@@ -416,8 +440,13 @@ class HomeAssistantIntegration:
                 # Publish state data
                 topic = client.config['mqtt']['topic']
                 
-                # Use updated MQTT publish with callback_api_version
-                publisher = mqtt.Client(client_id=f"renogy-bt-{device_id}", callback_api_version=mqtt.CallbackAPIVersion.VERSION1)
+                # Use modern MQTT publish without callback_api_version parameter
+                publisher = mqtt.Client(client_id=f"renogy-bt-{device_id}")
+                
+                # Add username/password from client config if available
+                if 'user' in client.config['mqtt'] and client.config['mqtt']['user']:
+                    publisher.username_pw_set(client.config['mqtt']['user'], client.config['mqtt']['password'])
+                    
                 publisher.connect(client.config['mqtt']['server'], client.config['mqtt'].getint('port'))
                 publisher.publish(topic, json.dumps(filtered_data))
                 publisher.disconnect()
@@ -432,14 +461,18 @@ class HomeAssistantIntegration:
         """Start monitoring devices"""
         logging.info("Starting Renogy BT Home Assistant Add-on")
         
-        if self.config['bluetooth']['auto_discover']:
+        if 'bluetooth' in self.config and self.config['bluetooth'].get('auto_discover', False):
             logging.info("Auto-discovery mode enabled. Searching for devices...")
-            loop = asyncio.get_event_loop()
-            devices = loop.run_until_complete(self.discover_devices())
+            # Use new asyncio pattern
+            devices = asyncio.run(self.discover_devices())
             self.update_device_config(devices)
         
-        # Add known devices from config
-        for device_config in self.config['bluetooth']['known_devices']:
+        # Add known devices from config if they exist
+        known_devices = []
+        if 'bluetooth' in self.config and 'known_devices' in self.config['bluetooth']:
+            known_devices = self.config['bluetooth']['known_devices']
+            
+        for device_config in known_devices:
             # Create a config for this device
             config = configparser.ConfigParser(inline_comment_prefixes=('#'))
             
