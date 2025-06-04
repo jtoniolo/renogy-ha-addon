@@ -14,6 +14,14 @@ Monitor Renogy solar devices via Bluetooth. This add-on supports automatic detec
 
 ## Changelog
 
+### 0.1.8
+
+- Improved multi-device monitoring capabilities
+- Fixed device configuration loading to properly handle all discovered devices
+- Added staggered polling to prevent Bluetooth collisions between devices
+- Improved logging for better troubleshooting of multi-device setups
+- Enhanced device discovery to ensure all Renogy devices are monitored
+
 ### 0.1.7
 
 - Improved MQTT discovery with full Home Assistant MQTT Discovery compatibility

@@ -60,28 +60,34 @@ class HomeAssistantIntegration:
             main_config.read(DEVICE_CONFIG_PATH)
             
             # Extract device sections
-            section_groups = {}
+            device_sections = []
             for section in main_config.sections():
-                prefix = section.split(':')[0] if ':' in section else section
-                if prefix not in section_groups:
-                    section_groups[prefix] = []
-                section_groups[prefix].append(section)
+                if section == 'device' or section.startswith('device:'):
+                    device_sections.append(section)
             
-            # Create individual device configs
-            for prefix, sections in section_groups.items():
-                if prefix == 'device':
-                    device_config = configparser.ConfigParser()
-                    for section in sections:
-                        device_config[section] = dict(main_config[section])
-                    
-                    # Add common sections
-                    for section in main_config.sections():
-                        if section not in sections and section not in ['device']:
-                            device_config[section] = dict(main_config[section])
-                    
-                    self.device_configs.append(device_config)
+            logging.info(f"Found {len(device_sections)} device sections in configuration")
+            
+            # Create individual device configs - one config per device section
+            for section in device_sections:
+                device_config = configparser.ConfigParser()
+                
+                # Add the device section
+                device_config['device'] = dict(main_config[section])
+                
+                # Add common sections
+                for common_section in main_config.sections():
+                    if common_section != 'device' and not common_section.startswith('device:'):
+                        device_config[common_section] = dict(main_config[common_section])
+                
+                self.device_configs.append(device_config)
+                
+                logging.info(f"Loaded device config: {device_config['device']['alias']} ({device_config['device']['mac_addr']})")
+                
+            logging.info(f"Loaded {len(self.device_configs)} device configurations")
         except Exception as e:
             logging.error(f"Error loading device configs: {e}")
+            import traceback
+            traceback.print_exc()
             
     def _create_device_config(self):
         """Create initial device configuration file"""
@@ -435,11 +441,11 @@ class HomeAssistantIntegration:
         if 'mqtt' not in config:
             config['mqtt'] = {
                 'enabled': 'true',
-                'server': 'core-mosquitto',
-                'port': '1883',
+                'server': self.mqtt_config['host'],
+                'port': str(self.mqtt_config['port']),
                 'topic': f"{self.config['mqtt']['topic_prefix']}/state",
-                'user': '',
-                'password': ''
+                'user': self.mqtt_config['username'],
+                'password': self.mqtt_config['password']
             }
             
         if 'remote_logging' not in config:
@@ -456,7 +462,14 @@ class HomeAssistantIntegration:
                 'system_id': ''
             }
         
-        # Add or update device sections
+        logging.info(f"Adding {len(found_devices)} devices to configuration")
+        
+        # First, clear any existing device sections to avoid duplicates
+        for section in list(config.sections()):
+            if section == "device" or section.startswith("device:"):
+                config.remove_section(section)
+        
+        # Add or update device sections - each device gets its own section
         for i, device in enumerate(found_devices):
             section_name = f"device:{i}" if i > 0 else "device"
             
@@ -466,6 +479,8 @@ class HomeAssistantIntegration:
                 device_type = "RNG_BATT"
             elif device['name'].startswith("BTRIC"):
                 device_type = "RNG_INVT"
+            
+            logging.info(f"Adding device {i+1}/{len(found_devices)}: {device['name']} ({device['mac_address']}) as {device_type}")
                 
             config[section_name] = {
                 'adapter': 'hci0',
@@ -478,6 +493,8 @@ class HomeAssistantIntegration:
         # Write the updated config
         with open(DEVICE_CONFIG_PATH, 'w') as configfile:
             config.write(configfile)
+        
+        logging.info(f"Device configuration updated with {len(found_devices)} devices")
             
         # Reload our device configs
         self.device_configs = []
@@ -613,15 +630,28 @@ class HomeAssistantIntegration:
             self.device_configs.append(config)
         
         # Start monitoring all configured devices
-        for config in self.device_configs:
+        for idx, config in enumerate(self.device_configs):
             try:
                 device_type = config['device']['type']
-                logging.info(f"Init {device_type}: {config['device']['alias']} => {config['device']['mac_addr']}")
+                device_name = config['device']['alias']
+                device_mac = config['device']['mac_addr']
+                logging.info(f"Initializing device {idx+1}/{len(self.device_configs)}: {device_name} ({device_mac}) - Type: {device_type}")
                 
                 # Create a new event loop for each device client to avoid the "no current event loop" error
                 device_loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(device_loop)
                 
+                # Adjust polling interval for each device to stagger them
+                # This helps prevent Bluetooth collisions when multiple devices are polled
+                stagger_seconds = idx * 5  # Stagger by 5 seconds per device
+                if 'data' in config and 'poll_interval' in config['data']:
+                    base_interval = int(config['data']['poll_interval'])
+                    # If interval is too short, add stagger; otherwise, don't modify
+                    if base_interval > stagger_seconds + 10:
+                        config['data']['poll_interval'] = str(base_interval + stagger_seconds)
+                        logging.info(f"Adjusted poll interval for {device_name} to {base_interval + stagger_seconds} seconds")
+                
+                # Initialize the appropriate client based on device type
                 if device_type == 'RNG_CTRL':
                     RoverClient(config, on_data_callback=self.on_data_received, on_error_callback=self.on_error).start()
                 elif device_type == 'RNG_CTRL_HIST':
@@ -634,8 +664,15 @@ class HomeAssistantIntegration:
                     DCChargerClient(config, on_data_callback=self.on_data_received, on_error_callback=self.on_error).start()
                 else:
                     logging.error(f"Unknown device type: {device_type}")
+                
+                # Give a short delay between starting each device client
+                # This prevents overwhelming the Bluetooth stack
+                time.sleep(2)
+                
             except Exception as e:
                 logging.error(f"Error starting device: {e}")
+                import traceback
+                traceback.print_exc()
 
     def _get_mqtt_config_from_config(self):
         """Get MQTT connection details from config file"""
