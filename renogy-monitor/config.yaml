@@ -28,9 +28,9 @@ options:
     discovery: true
   bluetooth:
     auto_discover: true
-    # known_devices: []
-  # temperature_unit: "C"
-  # debug: false
+    known_devices: []
+  temperature_unit: "C"
+  debug: false
 schema:
   scan_interval: "int(10,600)"
   mqtt:
@@ -38,11 +38,11 @@ schema:
     discovery: "bool"
   bluetooth:
     auto_discover: "bool"
-    # known_devices:
-    #   - name: "str?"
-    #     mac_address: "str"
-    #     device_type: "list(rover|rover_history|battery|inverter|dc_charger)"
-    #     device_id: "int(1,255)?"
-  # temperature_unit: "list(C|F)"
-  # debug: "bool"
+    known_devices:
+      - name: "str?"
+        mac_address: "str"
+        #device_type: "list(rover|rover_history|battery|inverter|dc_charger)"
+        #device_id: "int(1,255)?"
+  temperature_unit: "list(C|F)"
+  debug: "bool"
 
