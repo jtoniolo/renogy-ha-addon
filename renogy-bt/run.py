@@ -198,13 +198,22 @@ class HomeAssistantIntegration:
         # Create a unique ID for the device
         device_unique_id = f"renogy_{device_id}"
         
-        # Define base device info
+        # Define base device info according to HA standards (with abbreviations)
         device_info = {
-            "identifiers": [device_unique_id],
+            "ids": [device_unique_id],           # abbreviation for identifiers
             "name": device_name,
-            "manufacturer": "Renogy",
-            "model": device_data.get('model', "Unknown Model"),
-            "sw_version": "renogy-ha-addon"
+            "mf": "Renogy",                      # abbreviation for manufacturer
+            "mdl": device_data.get('model', "Unknown Model"),  # abbreviation for model
+            "sw": device_data.get('firmware_version', "Unknown"),  # abbreviation for sw_version
+            "hw": device_data.get('hardware_version', "Unknown"),  # abbreviation for hw_version
+            "via_device": "renogy-ha-addon"
+        }
+        
+        # Origin information (required for device-based discovery)
+        origin_info = {
+            "name": "renogy-ha-addon",
+            "sw": "0.1.7",
+            "url": "https://github.com/jtoniolo/renogy-ha-addon"
         }
         
         # Map of entity definitions based on data fields
@@ -312,37 +321,61 @@ class HomeAssistantIntegration:
         for field, value in device_data.items():
             if field in entity_mapping and field not in self.mqtt_discovery_sent.get(device_unique_id, []):
                 entity_config = entity_mapping[field]
-                object_id = f"{device_unique_id}_{field}"
                 
-                config_topic = f"{discovery_prefix}/sensor/{object_id}/config"
+                # Create a sanitized field name for use in the unique_id
+                sanitized_field = field.replace(" ", "_").lower()
                 
+                # Create unique identifiers following HA best practices
+                unique_id = f"{device_unique_id}_{sanitized_field}"
+                component_id = sanitized_field  # Used for object_id
+
+                # Config topic follows HA discovery pattern
+                config_topic = f"{discovery_prefix}/sensor/{device_id}/{component_id}/config"
+                
+                # Create MQTT discovery payload according to HA standards
                 config_payload = {
+                    "~": f"{base_topic}",  # Base topic - uses shorthand ~ notation
                     "name": entity_config["name"],
-                    "unique_id": object_id,
-                    "state_topic": f"{base_topic}/state",
+                    "unique_id": unique_id,
+                    "object_id": component_id,
+                    "state_topic": "~/state",  # Uses ~ notation for topic
                     "value_template": f"{{{{ value_json.{field} }}}}",
-                    "device": device_info
+                    "device": device_info,  # Uses abbreviations now
+                    "o": origin_info,  # Origin info (abbreviated)
+                    "availability": {
+                        "topic": "~/availability"  # Uses ~ notation for topic
+                    },
+                    "has_entity_name": True,  # Follow HA best practices for entity naming
+                    "entity_category": "diagnostic"  # Most sensor values are diagnostics
                 }
                 
                 # Add optional fields if they exist
                 for key in ["device_class", "unit_of_measurement", "state_class", "icon"]:
                     if key in entity_config:
-                        config_payload[key] = entity_config[key]
+                        # Use abbreviated form for certain fields when appropriate
+                        if key == "unit_of_measurement":
+                            config_payload["unit_of_meas"] = entity_config[key]  # Abbreviated form
+                        elif key == "device_class":
+                            config_payload["dev_cla"] = entity_config[key]  # Abbreviated form
+                        elif key == "state_class":
+                            config_payload["stat_cla"] = entity_config[key]  # Abbreviated form
+                        else:
+                            config_payload[key] = entity_config[key]
                 
                 # Publish discovery message
                 try:
                     # Use consistent callback API version
                     publisher = mqtt.Client(client_id="renogy-ha-addon-discovery", callback_api_version=mqtt.CallbackAPIVersion.VERSION1)
                     
-                    # Use the MQTT config from Supervisor API
+                    # Use the MQTT config
                     if self.mqtt_config['username'] and self.mqtt_config['password']:
                         publisher.username_pw_set(self.mqtt_config['username'], self.mqtt_config['password'])
                     
                     try:
                         publisher.connect(self.mqtt_config['host'], self.mqtt_config['port'])
-                        publisher.publish(config_topic, json.dumps(config_payload))
+                        publisher.publish(config_topic, json.dumps(config_payload), retain=True)  # Set retain flag
                         publisher.disconnect()
-                        logging.debug(f"Published discovery for {object_id}")
+                        logging.debug(f"Published discovery for {unique_id}")
                     except Exception as e:
                         logging.error(f"Failed to publish discovery message: {e}")
                     
@@ -454,6 +487,9 @@ class HomeAssistantIntegration:
         """Callback for when data is received from a device"""
         logging.info(f"Received data from {client.ble_manager.device.name}")
         
+        # Mark the device as available since we received data
+        self.publish_availability(client, available=True)
+        
         # Filter fields if configured
         config_section = 'data'
         filtered_data = Utils.filter_fields(data, client.config[config_section]['fields'])
@@ -469,25 +505,27 @@ class HomeAssistantIntegration:
                 if self.config['mqtt']['discovery']:
                     self._send_mqtt_discovery(device_id, device_name, filtered_data)
                 
-                # Publish state data
-                topic = client.config['mqtt']['topic']
+                # Create topic based on device ID 
+                topic_prefix = self.config['mqtt']['topic_prefix']
+                device_unique_id = f"renogy_{device_id}"
+                state_topic = f"{topic_prefix}/{device_unique_id}/state"
                 
                 # Use consistent callback API version
                 publisher = mqtt.Client(client_id=f"renogy-bt-{device_id}", callback_api_version=mqtt.CallbackAPIVersion.VERSION1)
                 
-                # Use the MQTT config from Supervisor API
+                # Use the MQTT config from configuration
                 if self.mqtt_config['username'] and self.mqtt_config['password']:
                     publisher.username_pw_set(self.mqtt_config['username'], self.mqtt_config['password'])
                 
                 try:
-                    # Use the host and port from the Supervisor-provided config
+                    # Use the host and port from the configuration
                     host = self.mqtt_config['host']
                     port = self.mqtt_config['port']
                     
                     publisher.connect(host, port)
-                    publisher.publish(topic, json.dumps(filtered_data))
+                    publisher.publish(state_topic, json.dumps(filtered_data), retain=True)
                     publisher.disconnect()
-                    logging.info(f"Published data to {topic}")
+                    logging.info(f"Published data to {state_topic}")
                 except Exception as e:
                     logging.error(f"Error publishing to MQTT: {e}")
             except Exception as e:
@@ -548,11 +586,14 @@ class HomeAssistantIntegration:
                 'fields': ''
             }
             
+            device_id = device_config['mac_address'].replace(':', '').lower()
+            device_unique_id = f"renogy_{device_id}"
+            
             config['mqtt'] = {
                 'enabled': 'true',
                 'server': 'core-mosquitto',
                 'port': '1883',
-                'topic': f"{self.config['mqtt']['topic_prefix']}/{device_config['mac_address'].replace(':', '').lower()}/state",
+                'topic': f"{self.config['mqtt']['topic_prefix']}/{device_unique_id}/state",
                 'user': '',
                 'password': ''
             }
@@ -611,6 +652,38 @@ class HomeAssistantIntegration:
                     f"Username={'<set>' if mqtt_config['username'] else '<not set>'}")
         
         return mqtt_config
+
+    def publish_availability(self, client, available=True):
+        """Publish availability status for a device"""
+        try:
+            if hasattr(client, 'ble_manager') and hasattr(client.ble_manager, 'device'):
+                device_id = client.ble_manager.device.address.replace(':', '').lower()
+                device_name = client.config['device']['alias']
+                
+                # Create a unique ID for the device
+                device_unique_id = f"renogy_{device_id}"
+                
+                # Create topic
+                topic_prefix = self.config['mqtt']['topic_prefix']
+                availability_topic = f"{topic_prefix}/{device_unique_id}/availability"
+                
+                # Create publisher
+                publisher = mqtt.Client(client_id=f"renogy-bt-availability-{device_id}", 
+                                       callback_api_version=mqtt.CallbackAPIVersion.VERSION1)
+                
+                # Set auth if needed
+                if self.mqtt_config['username'] and self.mqtt_config['password']:
+                    publisher.username_pw_set(self.mqtt_config['username'], self.mqtt_config['password'])
+                
+                # Connect and publish
+                publisher.connect(self.mqtt_config['host'], self.mqtt_config['port'])
+                status = "online" if available else "offline"
+                publisher.publish(availability_topic, status, retain=True)
+                publisher.disconnect()
+                
+                logging.info(f"Published availability status '{status}' for {device_name}")
+        except Exception as e:
+            logging.error(f"Error publishing availability status: {e}")
 
 if __name__ == "__main__":
     integration = HomeAssistantIntegration()

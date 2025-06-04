@@ -19,6 +19,10 @@ This Home Assistant add-on provides automatic detection and monitoring for Renog
 | `scan_interval` | Polling interval in seconds (default: 60) |
 | `mqtt.topic_prefix` | MQTT topic prefix for all data |
 | `mqtt.discovery` | Enable Home Assistant MQTT discovery |
+| `mqtt.host` | MQTT broker host (default: core-mosquitto) |
+| `mqtt.port` | MQTT broker port (default: 1883) |
+| `mqtt.username` | MQTT username (if authentication is required) |
+| `mqtt.password` | MQTT password (if authentication is required) |
 | `bluetooth.auto_discover` | Automatically discover Bluetooth devices |
 | `bluetooth.known_devices` | List of known devices with their details |
 | `temperature_unit` | Temperature unit (C or F) |
@@ -31,6 +35,10 @@ scan_interval: 60
 mqtt:
   topic_prefix: "renogy"
   discovery: true
+  host: "core-mosquitto"
+  port: 1883
+  username: "mqttuser"  # Optional
+  password: "mqttpassword"  # Optional
 bluetooth:
   auto_discover: true
   known_devices:
@@ -55,6 +63,24 @@ debug: false
 | Renogy RIV4835CSH1S Inverters | ✅ |
 | Renogy Rego RIV1230RCH Inverters | ✅ |
 | Other SRNE-compatible devices | ⚠️ May work |
+
+## MQTT Integration
+
+This add-on fully integrates with Home Assistant via MQTT discovery. When enabled (the default setting), your Renogy devices will automatically appear in Home Assistant as devices with appropriate sensor entities.
+
+### MQTT Discovery
+
+- All entities follow the [Home Assistant MQTT discovery protocol](https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery)
+- Discovery messages are published with the retain flag
+- Entities include proper device and origin information
+- Availability status is published to track device online/offline state
+
+### Topic Structure
+
+The MQTT topics follow this structure:
+- Discovery topics: `homeassistant/sensor/{device_id}/{component_id}/config`
+- State topics: `{topic_prefix}/renogy_{device_id}/state`
+- Availability topics: `{topic_prefix}/renogy_{device_id}/availability`
 
 ## Troubleshooting
 
