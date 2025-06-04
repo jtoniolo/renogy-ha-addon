@@ -39,8 +39,8 @@ schema:
   bluetooth:
     auto_discover: "bool"
     known_devices:
-      - name: "str"
-        mac_address: "str"
+      - name: str
+        mac_address: str
         #device_type: "list(rover|rover_history|battery|inverter|dc_charger)"
         #device_id: "int(1,255)?"
   temperature_unit: "list(C|F)"
