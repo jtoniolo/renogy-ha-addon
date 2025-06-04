@@ -8,7 +8,6 @@ import time
 import configparser
 from bleak import BleakScanner
 import paho.mqtt.client as mqtt
-import paho.mqtt.publish as publish
 
 # Set up logging
 logging.basicConfig(
@@ -126,7 +125,7 @@ class HomeAssistantIntegration:
     
     def _setup_mqtt(self):
         """Set up the MQTT client"""
-        self.mqtt_client = mqtt.Client("renogy-ha-addon")
+        self.mqtt_client = mqtt.Client(client_id="renogy-ha-addon", callback_api_version=mqtt.CallbackAPIVersion.VERSION1)
         self.mqtt_client.on_connect = self._on_mqtt_connect
         self.mqtt_client.on_disconnect = self._on_mqtt_disconnect
         
@@ -290,13 +289,11 @@ class HomeAssistantIntegration:
                 
                 # Publish discovery message
                 try:
-                    publish.single(
-                        config_topic, 
-                        payload=json.dumps(config_payload),
-                        hostname="core-mosquitto",
-                        port=1883,
-                        client_id="renogy-ha-addon-discovery"
-                    )
+                    # Use updated MQTT publish with callback_api_version
+                    publisher = mqtt.Client(client_id="renogy-ha-addon-discovery", callback_api_version=mqtt.CallbackAPIVersion.VERSION1)
+                    publisher.connect("core-mosquitto", 1883)
+                    publisher.publish(config_topic, json.dumps(config_payload))
+                    publisher.disconnect()
                     
                     # Track that we've sent this discovery message
                     if device_unique_id not in self.mqtt_discovery_sent:
@@ -419,13 +416,11 @@ class HomeAssistantIntegration:
                 # Publish state data
                 topic = client.config['mqtt']['topic']
                 
-                publish.single(
-                    topic,
-                    payload=json.dumps(filtered_data),
-                    hostname=client.config['mqtt']['server'],
-                    port=client.config['mqtt'].getint('port'),
-                    client_id=f"renogy-bt-{device_id}"
-                )
+                # Use updated MQTT publish with callback_api_version
+                publisher = mqtt.Client(client_id=f"renogy-bt-{device_id}", callback_api_version=mqtt.CallbackAPIVersion.VERSION1)
+                publisher.connect(client.config['mqtt']['server'], client.config['mqtt'].getint('port'))
+                publisher.publish(topic, json.dumps(filtered_data))
+                publisher.disconnect()
             except Exception as e:
                 logging.error(f"Error publishing to MQTT: {e}")
     
