@@ -28,7 +28,11 @@ options:
     discovery: true
   bluetooth:
     auto_discover: true
-    known_devices: []
+    known_devices: 
+      - name: "Renogy Device"
+        mac_address: "00:11:22:33:44:55"
+        #device_type: "list(rover|rover_history|battery|inverter|dc_charger)"
+        #device_id: 1
   temperature_unit: "C"
   debug: false
 schema:
