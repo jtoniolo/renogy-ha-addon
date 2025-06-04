@@ -3,16 +3,19 @@ name: Renogy Monitor Add-on
 version: "1.2.0"
 slug: renogy-monitor
 description: Renogy Monitor add-on for Home Assistant.
-url: "https://github.com/jtoniolo/renogy-ha-addon"
+url: "https://github.com/jtoniolo/renogy-ha-addon/tree/main/renogy-monitor"
 arch:
   - armhf
   - armv7
   - aarch64
   - amd64
   - i386
-init: false
+startup: services
+boot: auto
 map:
-  - share:rw
+  - bluetooth:ro
+services:
+  - mqtt:need
 options:
   message: "Hello world..."
 schema:
