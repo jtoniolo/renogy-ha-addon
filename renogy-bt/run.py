@@ -82,6 +82,11 @@ class HomeAssistantIntegration:
                     if common_section != 'device' and not common_section.startswith('device:'):
                         device_config[common_section] = dict(main_config[common_section])
                 
+                # Disable direct MQTT in the original client to avoid duplicate publications
+                # DeviceManager will handle all MQTT publishing instead
+                if 'mqtt' in device_config:
+                    device_config['mqtt']['enabled'] = 'false'
+                
                 self.device_configs.append(device_config)
                 
                 logging.info(f"Loaded device config: {device_config['device']['alias']} ({device_config['device']['mac_addr']})")
@@ -106,10 +111,12 @@ class HomeAssistantIntegration:
             'fields': ''
         }
         
-        # MQTT section
+        # MQTT section 
+        # Disable direct MQTT publishing from the original client to avoid duplicate publications
+        # DeviceManager will handle all MQTT publishing instead
         config['mqtt'] = {
-            'enabled': 'true',
-            'server': 'core-mosquitto',  # Home Assistant's internal MQTT broker
+            'enabled': 'false',  # Disable MQTT in the client config
+            'server': 'core-mosquitto',
             'port': '1883',
             'topic': f"{self.config['mqtt']['topic_prefix']}/state",
             'user': '',
@@ -322,8 +329,8 @@ class HomeAssistantIntegration:
         config_section = 'data'
         filtered_data = Utils.filter_fields(data, client.config[config_section]['fields'])
         
-        # Log to MQTT if enabled
-        if client.config['mqtt'].getboolean('enabled') and self.mqtt_connected:
+        # Always use DeviceManager for MQTT, regardless of client's mqtt.enabled setting
+        if self.mqtt_connected:
             try:
                 # Send discovery messages if enabled
                 if self.config['mqtt']['discovery']:
@@ -395,7 +402,7 @@ class HomeAssistantIntegration:
             device_unique_id = f"renogy_{device_id}"
             
             config['mqtt'] = {
-                'enabled': 'true',
+                'enabled': 'false',  # Disable direct MQTT in client to avoid duplicates
                 'server': 'core-mosquitto',
                 'port': '1883',
                 'topic': f"{self.config['mqtt']['topic_prefix']}/{device_unique_id}/state",

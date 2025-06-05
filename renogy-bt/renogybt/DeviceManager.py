@@ -7,6 +7,10 @@ class DeviceManager:
     """
     DeviceManager handles consistent MQTT discovery and publishing for all Renogy device types.
     This class ensures that all device types follow the same MQTT topic structure and discovery format.
+    
+    Note: This class is the ONLY component that should publish to MQTT. All other publishing should
+    be disabled to avoid duplicate publications. The clients themselves have their mqtt.enabled
+    setting set to 'false' to prevent them from publishing directly.
     """
     
     def __init__(self, config, mqtt_config):
